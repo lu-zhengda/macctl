@@ -1,0 +1,53 @@
+version: 2
+
+builds:
+  - main: ./cmd/macctl
+    binary: macctl
+    goos:
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/lu-zhengda/macctl/internal/cli.version={{.Version}}
+
+archives:
+  - formats:
+      - tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - completions/*
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+homebrew_casks:
+  - repository:
+      owner: lu-zhengda
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Casks
+    homepage: "https://github.com/lu-zhengda/macctl"
+    description: "macOS environment controller"
+    license: "MIT"
+    binaries:
+      - macctl
+    completions:
+      bash: completions/macctl.bash
+      zsh: completions/macctl.zsh
+      fish: completions/macctl.fish
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/macctl"]
+          end
