@@ -65,8 +65,10 @@ func parseLogOutput(output string) []PowerEvent {
 	return events
 }
 
-// timestampRe matches the compact log timestamp format: "2025-01-15 10:30:45.123456-0800"
-var timestampRe = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d+[+-]\d{4})\s+`)
+// timestampRe matches the compact log timestamp format.
+// Real compact format: "2025-01-15 10:30:45.123" (no timezone offset).
+// Also supports legacy format with timezone: "2025-01-15 10:30:45.123456-0800".
+var timestampRe = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d+(?:[+-]\d{4})?)\s+`)
 
 func parseLine(line string) *PowerEvent {
 	m := timestampRe.FindStringSubmatch(line)
@@ -87,22 +89,26 @@ func parseLine(line string) *PowerEvent {
 	}
 
 	switch {
-	case strings.Contains(lower, "wake reason") || strings.Contains(lower, "waking"):
+	case strings.Contains(lower, "wake reason") || strings.Contains(lower, "waking") ||
+		strings.Contains(lower, "display wake") || strings.Contains(lower, "darkwake") || strings.Contains(lower, "fullwake"):
 		event.Type = EventWake
 		event.Detail = extractDetail(rest)
-	case strings.Contains(lower, "sleep reason") || strings.Contains(lower, "entering sleep") || strings.Contains(lower, "going to sleep"):
+	case strings.Contains(lower, "sleep reason") || strings.Contains(lower, "entering sleep") ||
+		strings.Contains(lower, "going to sleep") || strings.Contains(lower, "maintenance sleep") ||
+		strings.Contains(lower, "sleepservice"):
 		event.Type = EventSleep
 		event.Detail = extractDetail(rest)
-	case strings.Contains(lower, "lid open"):
+	case strings.Contains(lower, "lidopen") || strings.Contains(lower, "lid open"):
 		event.Type = EventLidOpen
 		event.Detail = extractDetail(rest)
-	case strings.Contains(lower, "lid close"):
+	case strings.Contains(lower, "lidclose") || strings.Contains(lower, "lid close") || strings.Contains(lower, "clamshell"):
 		event.Type = EventLidClose
 		event.Detail = extractDetail(rest)
 	case strings.Contains(lower, "thermal") && (strings.Contains(lower, "throttl") || strings.Contains(lower, "pressure")):
 		event.Type = EventThermal
 		event.Detail = extractDetail(rest)
-	case strings.Contains(lower, "power source") || strings.Contains(lower, "ac power") || strings.Contains(lower, "battery power"):
+	case strings.Contains(lower, "power source") || strings.Contains(lower, "ac power") || strings.Contains(lower, "battery power") ||
+		strings.Contains(lower, "accpowersources"):
 		event.Type = EventPowerSource
 		event.Detail = extractDetail(rest)
 	default:
@@ -128,11 +134,13 @@ func extractDetail(s string) string {
 }
 
 func parseTimestamp(s string) (time.Time, error) {
-	// Try parsing with microseconds: "2025-01-15 10:30:45.123456-0800"
 	layouts := []string{
 		"2006-01-02 15:04:05.000000-0700",
 		"2006-01-02 15:04:05.000-0700",
 		"2006-01-02 15:04:05-0700",
+		"2006-01-02 15:04:05.000000",
+		"2006-01-02 15:04:05.000",
+		"2006-01-02 15:04:05",
 	}
 
 	for _, layout := range layouts {
