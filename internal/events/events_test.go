@@ -12,16 +12,28 @@ func TestParseTimestamp(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name:  "microseconds",
+			name:  "microseconds with timezone",
 			input: "2025-01-15 10:30:45.123456-0800",
 		},
 		{
-			name:  "milliseconds",
+			name:  "milliseconds with timezone",
 			input: "2025-01-15 10:30:45.123-0800",
 		},
 		{
-			name:  "no subseconds",
+			name:  "no subseconds with timezone",
 			input: "2025-01-15 10:30:45-0800",
+		},
+		{
+			name:  "milliseconds without timezone (real compact format)",
+			input: "2025-01-15 10:30:45.123",
+		},
+		{
+			name:  "microseconds without timezone",
+			input: "2025-01-15 10:30:45.123456",
+		},
+		{
+			name:  "no subseconds without timezone",
+			input: "2025-01-15 10:30:45",
 		},
 		{
 			name:    "invalid",
@@ -62,38 +74,93 @@ func TestParseLine(t *testing.T) {
 		wantNil  bool
 	}{
 		{
-			name:     "wake event",
-			line:     "2025-01-15 10:30:45.123456-0800  0x123  Default  com.apple.powerd  Wake Reason: EC.LidOpen",
+			name:     "wake reason",
+			line:     "2025-01-15 10:30:45.123 Df powerd[323:1a2b] [com.apple.powerd:assertions] Wake Reason: EC.LidOpen",
 			wantType: EventWake,
 		},
 		{
-			name:     "sleep event",
-			line:     "2025-01-15 10:30:45.123456-0800  0x123  Default  com.apple.powerd  Entering sleep reason: Clamshell Sleep",
+			name:     "display wake",
+			line:     "2025-01-15 10:30:45.123 Df powerd[323:78a7d1] [com.apple.powerd:assertions] Cancelling notification display wake 0",
+			wantType: EventWake,
+		},
+		{
+			name:     "DarkWake",
+			line:     "2025-01-15 10:30:45.123 Df powerd[323:1a2b] [com.apple.powerd:assertions] DarkWake from Deep Idle",
+			wantType: EventWake,
+		},
+		{
+			name:     "FullWake",
+			line:     "2025-01-15 10:30:45.123 Df powerd[323:1a2b] [com.apple.powerd:assertions] FullWake reason: UserActivity",
+			wantType: EventWake,
+		},
+		{
+			name:     "entering sleep",
+			line:     "2025-01-15 10:30:45.123 Df powerd[323:1a2b] [com.apple.powerd:assertions] Entering sleep reason: Clamshell Sleep",
 			wantType: EventSleep,
 		},
 		{
-			name:     "lid open",
-			line:     "2025-01-15 10:30:45.123456-0800  0x123  Default  com.apple.powerd  Lid Open detected",
+			name:     "going to sleep",
+			line:     "2025-01-15 10:30:45.123 Df powerd[323:1a2b] [com.apple.powerd:sleep] Going to sleep reason: Idle",
+			wantType: EventSleep,
+		},
+		{
+			name:     "maintenance sleep",
+			line:     "2025-01-15 10:30:45.123 Df powerd[323:1a2b] [com.apple.powerd:sleep] Maintenance sleep wake",
+			wantType: EventSleep,
+		},
+		{
+			name:     "SleepService",
+			line:     "2025-01-15 10:30:45.123 Df powerd[323:1a2b] [com.apple.powerd:sleep] SleepService: window begins",
+			wantType: EventSleep,
+		},
+		{
+			name:     "lid open with space",
+			line:     "2025-01-15 10:30:45.123 Df powerd[323:1a2b] [com.apple.powerd:assertions] Lid Open detected",
 			wantType: EventLidOpen,
 		},
 		{
-			name:     "lid close",
-			line:     "2025-01-15 10:30:45.123456-0800  0x123  Default  com.apple.powerd  Lid Close detected",
+			name:     "LidOpen without space",
+			line:     "2025-01-15 10:30:45.123 Df powerd[323:1a2b] [com.apple.powerd:assertions] EC.LidOpen event received",
+			wantType: EventLidOpen,
+		},
+		{
+			name:     "lid close with space",
+			line:     "2025-01-15 10:30:45.123 Df powerd[323:1a2b] [com.apple.powerd:assertions] Lid Close detected",
+			wantType: EventLidClose,
+		},
+		{
+			name:     "LidClose without space",
+			line:     "2025-01-15 10:30:45.123 E  powerd[323:78a7d1] [com.apple.powerd:assertions] Pid 374 is not privileged to set property AppliesOnLidClose",
+			wantType: EventLidClose,
+		},
+		{
+			name:     "clamshell",
+			line:     "2025-01-15 10:30:45.123 Df powerd[323:1a2b] [com.apple.powerd:assertions] Clamshell state changed",
 			wantType: EventLidClose,
 		},
 		{
 			name:     "thermal throttle",
-			line:     "2025-01-15 10:30:45.123456-0800  0x123  Default  com.apple.powerd  Thermal pressure throttling CPU",
+			line:     "2025-01-15 10:30:45.123 Df powerd[323:1a2b] [com.apple.powerd:thermal] Thermal pressure throttling CPU",
 			wantType: EventThermal,
 		},
 		{
 			name:     "power source",
-			line:     "2025-01-15 10:30:45.123456-0800  0x123  Default  com.apple.powerd  Power source changed to AC Power",
+			line:     "2025-01-15 10:30:45.123 Df powerd[323:d9137a] [com.apple.powerd:battery] Received power source(psid:6829) update from pid 669: <private>",
 			wantType: EventPowerSource,
 		},
 		{
+			name:     "accpowersources",
+			line:     "2025-01-15 10:30:45.123 Df powerd[323:78c169] [com.apple.powerd:battery] posted 'com.apple.system.accpowersources.attach'",
+			wantType: EventPowerSource,
+		},
+		{
+			name:     "legacy format with timezone",
+			line:     "2025-01-15 10:30:45.123456-0800  0x123  Default  com.apple.powerd  Wake Reason: EC.LidOpen",
+			wantType: EventWake,
+		},
+		{
 			name:    "unrelated line",
-			line:    "2025-01-15 10:30:45.123456-0800  0x123  Default  com.apple.powerd  Some unrelated message",
+			line:    "2025-01-15 10:30:45.123 Df powerd[323:1a2b] [com.apple.powerd:assertions] Some unrelated message",
 			wantNil: true,
 		},
 		{
@@ -131,10 +198,10 @@ func TestParseLine(t *testing.T) {
 }
 
 func TestParseLogOutput(t *testing.T) {
-	input := `2025-01-15 08:00:00.000000-0800  0x1  Default  com.apple.powerd  Wake Reason: EC.LidOpen
-2025-01-15 08:00:01.000000-0800  0x2  Default  com.apple.powerd  Power source changed to AC Power
-2025-01-15 12:00:00.000000-0800  0x3  Default  com.apple.powerd  Some unrelated log entry
-2025-01-15 18:00:00.000000-0800  0x4  Default  com.apple.powerd  Entering sleep reason: Clamshell Sleep
+	input := `2025-01-15 08:00:00.123 Df powerd[323:1a2b] [com.apple.powerd:assertions] Wake Reason: EC.LidOpen
+2025-01-15 08:00:01.456 Df powerd[323:d9137a] [com.apple.powerd:battery] Received power source(psid:6829) update from pid 669: <private>
+2025-01-15 12:00:00.789 Df powerd[323:1a2b] [com.apple.powerd:assertions] Some unrelated log entry
+2025-01-15 18:00:00.012 Df powerd[323:1a2b] [com.apple.powerd:assertions] Entering sleep reason: Clamshell Sleep
 `
 
 	events := parseLogOutput(input)
