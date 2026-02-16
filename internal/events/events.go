@@ -15,6 +15,7 @@ type PowerEvent struct {
 	Timestamp time.Time `json:"timestamp"`
 	Type      string    `json:"type"`
 	Detail    string    `json:"detail"`
+	Count     int       `json:"count,omitempty"`
 }
 
 // EventType constants for categorizing events.
@@ -64,6 +65,10 @@ func parseLogOutput(output string) []PowerEvent {
 
 	return events
 }
+
+// logPrefixRe matches the compact log prefix after the timestamp is stripped.
+// Format: "Df powerd[323:dbd3ca] [com.apple.powerd:battery] " (type + process + subsystem).
+var logPrefixRe = regexp.MustCompile(`^\w{1,3}\s+\S+\[[^\]]+\]\s+\[[^\]]+\]\s+`)
 
 // timestampRe matches the compact log timestamp format.
 // Real compact format: "2025-01-15 10:30:45.123" (no timezone offset).
@@ -120,17 +125,41 @@ func parseLine(line string) *PowerEvent {
 }
 
 func extractDetail(s string) string {
-	// Remove the process/subsystem prefix to get a cleaner detail string.
-	// Compact format often has: "0x123 Default com.apple.powerd ... message"
-	parts := strings.SplitN(s, "  ", 2)
-	if len(parts) > 1 {
-		return strings.TrimSpace(parts[1])
-	}
+	// Strip the compact log prefix: "Df powerd[323:dbd3ca] [com.apple.powerd:battery] "
+	detail := logPrefixRe.ReplaceAllString(s, "")
+	detail = strings.TrimSpace(detail)
+
 	// Truncate long details.
-	if len(s) > 200 {
-		return s[:200] + "..."
+	if len(detail) > 200 {
+		return detail[:200] + "..."
 	}
-	return strings.TrimSpace(s)
+	return detail
+}
+
+// DeduplicateEvents collapses consecutive events of the same type within
+// a time window into a single event with a count.
+func DeduplicateEvents(events []PowerEvent, window time.Duration) []PowerEvent {
+	if len(events) == 0 {
+		return nil
+	}
+
+	var result []PowerEvent
+	current := events[0]
+	current.Count = 1
+
+	for i := 1; i < len(events); i++ {
+		e := events[i]
+		if e.Type == current.Type && e.Timestamp.Sub(current.Timestamp) <= window {
+			current.Count++
+		} else {
+			result = append(result, current)
+			current = e
+			current.Count = 1
+		}
+	}
+	result = append(result, current)
+
+	return result
 }
 
 func parseTimestamp(s string) (time.Time, error) {

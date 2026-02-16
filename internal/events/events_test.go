@@ -234,12 +234,17 @@ func TestExtractDetail(t *testing.T) {
 		want  string
 	}{
 		{
-			name:  "with double space prefix",
-			input: "0x123 Default  Wake Reason: EC.LidOpen",
-			want:  "Wake Reason: EC.LidOpen",
+			name:  "compact format Df prefix",
+			input: `Df powerd[323:dbd3ca] [com.apple.powerd:battery] Received power source update`,
+			want:  "Received power source update",
 		},
 		{
-			name:  "no double space",
+			name:  "compact format E prefix with trailing spaces",
+			input: `E  powerd[323:78a7d1] [com.apple.powerd:assertions] Error message here`,
+			want:  "Error message here",
+		},
+		{
+			name:  "no prefix",
 			input: "Simple message",
 			want:  "Simple message",
 		},
@@ -250,6 +255,74 @@ func TestExtractDetail(t *testing.T) {
 			got := extractDetail(tt.input)
 			if got != tt.want {
 				t.Errorf("extractDetail(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDeduplicateEvents(t *testing.T) {
+	base := time.Date(2025, 1, 15, 10, 0, 0, 0, time.UTC)
+	window := 30 * time.Second
+
+	tests := []struct {
+		name       string
+		events     []PowerEvent
+		wantLen    int
+		wantCounts []int
+	}{
+		{
+			name:    "empty input",
+			events:  nil,
+			wantLen: 0,
+		},
+		{
+			name: "single event",
+			events: []PowerEvent{
+				{Timestamp: base, Type: EventWake, Detail: "wake"},
+			},
+			wantLen:    1,
+			wantCounts: []int{1},
+		},
+		{
+			name: "3 consecutive same-type within window",
+			events: []PowerEvent{
+				{Timestamp: base, Type: EventPowerSource, Detail: "update 1"},
+				{Timestamp: base.Add(5 * time.Second), Type: EventPowerSource, Detail: "update 2"},
+				{Timestamp: base.Add(10 * time.Second), Type: EventPowerSource, Detail: "update 3"},
+			},
+			wantLen:    1,
+			wantCounts: []int{3},
+		},
+		{
+			name: "2 different types",
+			events: []PowerEvent{
+				{Timestamp: base, Type: EventWake, Detail: "wake"},
+				{Timestamp: base.Add(5 * time.Second), Type: EventSleep, Detail: "sleep"},
+			},
+			wantLen:    2,
+			wantCounts: []int{1, 1},
+		},
+		{
+			name: "same type but outside window",
+			events: []PowerEvent{
+				{Timestamp: base, Type: EventPowerSource, Detail: "update 1"},
+				{Timestamp: base.Add(60 * time.Second), Type: EventPowerSource, Detail: "update 2"},
+			},
+			wantLen:    2,
+			wantCounts: []int{1, 1},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := DeduplicateEvents(tt.events, window)
+			if len(got) != tt.wantLen {
+				t.Fatalf("len = %d, want %d", len(got), tt.wantLen)
+			}
+			for i, wc := range tt.wantCounts {
+				if got[i].Count != wc {
+					t.Errorf("event[%d].Count = %d, want %d", i, got[i].Count, wc)
+				}
 			}
 		})
 	}
