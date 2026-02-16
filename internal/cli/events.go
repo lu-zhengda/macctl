@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"text/tabwriter"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -28,6 +29,8 @@ wake/sleep, lid open/close, thermal throttling, and power source changes.`,
 			return fmt.Errorf("failed to get power events: %w", err)
 		}
 
+		powerEvents = events.DeduplicateEvents(powerEvents, 30*time.Second)
+
 		if jsonFlag {
 			return printJSON(powerEvents)
 		}
@@ -44,9 +47,13 @@ wake/sleep, lid open/close, thermal throttling, and power source changes.`,
 			if len(detail) > 80 {
 				detail = detail[:80] + "..."
 			}
+			typeStr := e.Type
+			if e.Count > 1 {
+				typeStr = fmt.Sprintf("%s (x%d)", e.Type, e.Count)
+			}
 			fmt.Fprintf(w, "%s\t%s\t%s\n",
 				e.Timestamp.Local().Format("2006-01-02 15:04:05"),
-				e.Type, detail)
+				typeStr, detail)
 		}
 		w.Flush()
 		return nil
