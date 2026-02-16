@@ -12,6 +12,7 @@ import (
 )
 
 var eventsLast string
+var typeFilter string
 
 var eventsCmd = &cobra.Command{
 	Use:   "events",
@@ -27,6 +28,16 @@ wake/sleep, lid open/close, thermal throttling, and power source changes.`,
 		powerEvents, err := events.GetEvents(duration)
 		if err != nil {
 			return fmt.Errorf("failed to get power events: %w", err)
+		}
+
+		if typeFilter != "" {
+			var filtered []events.PowerEvent
+			for _, e := range powerEvents {
+				if e.Type == typeFilter {
+					filtered = append(filtered, e)
+				}
+			}
+			powerEvents = filtered
 		}
 
 		powerEvents = events.DeduplicateEvents(powerEvents, 30*time.Second)
@@ -62,5 +73,6 @@ wake/sleep, lid open/close, thermal throttling, and power source changes.`,
 
 func init() {
 	eventsCmd.Flags().StringVar(&eventsLast, "last", "", "Duration to look back (e.g., 24h, 7d; default: 24h)")
+	eventsCmd.Flags().StringVar(&typeFilter, "type", "", "Filter events by type (e.g., wake, sleep, power_source_change)")
 	rootCmd.AddCommand(eventsCmd)
 }

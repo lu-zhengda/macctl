@@ -244,6 +244,11 @@ func TestExtractDetail(t *testing.T) {
 			want:  "Error message here",
 		},
 		{
+			name:  "process name with spaces",
+			input: `Df Some App[123:abc] [com.apple.powerd:battery] message here`,
+			want:  "message here",
+		},
+		{
 			name:  "no prefix",
 			input: "Simple message",
 			want:  "Simple message",

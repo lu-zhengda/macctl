@@ -68,7 +68,7 @@ func parseLogOutput(output string) []PowerEvent {
 
 // logPrefixRe matches the compact log prefix after the timestamp is stripped.
 // Format: "Df powerd[323:dbd3ca] [com.apple.powerd:battery] " (type + process + subsystem).
-var logPrefixRe = regexp.MustCompile(`^\w{1,3}\s+\S+\[[^\]]+\]\s+\[[^\]]+\]\s+`)
+var logPrefixRe = regexp.MustCompile(`^\w{1,3}\s+.+?\[[^\]]+\]\s+\[[^\]]+\]\s+`)
 
 // timestampRe matches the compact log timestamp format.
 // Real compact format: "2025-01-15 10:30:45.123" (no timezone offset).
